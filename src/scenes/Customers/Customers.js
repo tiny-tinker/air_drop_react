@@ -7,8 +7,12 @@ import {
   changeViewOption,
   addSavedViewOption,
   getSavedViewOptions,
-  removeSavedViewOption
-}from '../../modules/customer/customerAction';
+  removeSavedViewOption,
+  addSavedFilterOption,
+  getSavedFilterOptions,
+  changeFilterOption,
+  removeSavedFilterOption
+} from '../../modules/customer/customerAction';
 import ListView from '../components/ListView/ListView';
 
 class Customers extends React.Component {
@@ -16,13 +20,16 @@ class Customers extends React.Component {
     super(props);
     this.props.customerActions.getCustomerData();
     this.props.customerActions.getSavedViewOptions();
+    this.props.customerActions.getSavedFilterOptions();
   }
   render() {
     const {
       listViewHeaders,
-      listViewRawData,
+      listViewRowData,
       savedViewOptions,
-      chosenViewOption
+      chosenViewOption,
+      savedFilterOptions,
+      chosenFilterOption
     } = this.props;
     return(
       <div className="customers">
@@ -30,10 +37,15 @@ class Customers extends React.Component {
           handleViewSelectChange={(optionName) => { this.props.customerActions.changeViewOption(optionName); }}
           handleSaveViewClick={(viewOption) => { this.props.customerActions.addSavedViewOption(viewOption); }}
           handleRemoveSavedViewOption={(optionName) => {this.props.customerActions.removeSavedViewOption(optionName); }}
+          handleFilterSelectChange={(optionName) => {this.props.customerActions.changeFilterOption(optionName); }}
+          handleSaveFilterClick={(filterOption) =>{ this.props.customerActions.addSavedFilterOption(filterOption); }}
+          handleRemoveSavedFilterOption={(optionName) => {this.props.customerActions.removeSavedFilterOption(optionName); }}
           listViewHeaders = {listViewHeaders}
-          listViewRowData = {listViewRawData}
+          listViewRowData = {listViewRowData}
           savedViewOptions={savedViewOptions}
           chosenViewOption={chosenViewOption}
+          savedFilterOptions={savedFilterOptions}
+          chosenFilterOption={chosenFilterOption}
         />
       </div>
     )
@@ -44,9 +56,11 @@ class Customers extends React.Component {
 export default connect(
   state => ({
     listViewHeaders: state.customer.customerHeaders,
-    listViewRawData: state.customer.customers,
+    listViewRowData: state.customer.customers,
     savedViewOptions: state.customer.savedViewOptions,
-    chosenViewOption: state.customer.chosenViewOption
+    chosenViewOption: state.customer.chosenViewOption,
+    savedFilterOptions: state.customer.savedFilterOptions,
+    chosenFilterOption: state.customer.chosenFilterOption
   }),
   dispatch => ({
     customerActions: bindActionCreators({
@@ -54,7 +68,11 @@ export default connect(
         changeViewOption,
         addSavedViewOption,
         getSavedViewOptions,
-        removeSavedViewOption
+        removeSavedViewOption,
+        addSavedFilterOption,
+        getSavedFilterOptions,
+        changeFilterOption,
+        removeSavedFilterOption
       },
       dispatch
     )

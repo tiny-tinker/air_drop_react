@@ -1,25 +1,159 @@
 import React from 'react';
 import PropTypes from 'prop-types';
-import { Row, Col, Button, Jumbotron, Container } from 'reactstrap';
+import { Row, Col, Button, Jumbotron, Container, Input } from 'reactstrap';
 import Select from 'react-select';
 import 'react-select/dist/react-select.css';
 import FaFilter from 'react-icons/lib/fa/filter';
 import { Collapse } from 'react-collapse';
 import { AgGridReact } from 'ag-grid-react';
+import DateFilterField from './components/DateFilterField';
 import "../../../../node_modules/ag-grid/dist/styles/ag-grid.css";
 import "../../../../node_modules/ag-grid/dist/styles/theme-fresh.css";
 import Dialog from 'material-ui/Dialog';
+import moment from 'moment';
 import './ListView.css';
+import $ from "jquery";
+
+const listViewConditions = [
+  {value:"is",label:"is"},
+  {value:"isnot",label:"is not"},
+  {value:"isempty",label:"is empty"},
+  {value:"isnotemtpy",label:"is not empty"},
+  {value:"startswith",label:"starts with"},
+  {value:"endswith",label:"ends with"},
+  {value:"contains",label:"contains"},
+  {value:"doesnotcontain",label:"does not contain"},
+  {value:"isanything",label:"is anything"},
+  {value:"issameas",label:"is same as"},
+  {value:"isdifferentfrom",label:"is different from"},
+  {value:"isemptystring",label:"isemptystring"}
+];
+
+const dateTypeHeaderFields = [
+  'DlvryDate',
+  'DriverInspDate',
+  'EstDlvryDate',
+  'FirstFillDate',
+  'NextInspDateFrom',
+  'NextInspDateTo',
+  'OrderDueDate',
+  'OrderDueDateWoDlvry',
+  'PremoRunOutDate',
+  'TankChangeOutDate',
+  'UnloadTime'
+];
+
+const buildDateConditions = (conditions = [], condition, value, condValue, condValue2) => {
+  let condDate = condValue ? condValue.date : null;
+  let condDate2 = condValue2 ? condValue2.date : null;
+
+  const condLabel = condValue ? condValue.label : null;
+  const condLabel2 = condValue2 ? condValue2.label : null;
+
+
+  let condMoment = null
+  let condMoment2 = null
+
+  if(condDate != null){
+    if(typeof(condDate) === "string")
+      condDate = moment(condDate)
+    const formated_condType = condDate.format('YYYY-MM-DD HH:mm')
+    condMoment = moment(formated_condType)
+  }
+
+  if(condDate2 != null) {
+    if(typeof(condDate2) === "string")
+      condDate2 = moment(condDate2)
+    const formated_condType2 = condDate2.format('YYYY-MM-DD HH:mm')
+    condMoment2 = moment(formated_condType2)
+  }
+
+
+  const formatedType = moment(value).format('YYYY-MM-DD HH:mm')
+  const valueMoment = moment(formatedType)
+
+
+  switch (condition) {
+    case 'on':
+      conditions.push(valueMoment.isSame(condMoment));
+      break;
+    case 'not_on':
+      conditions.push(!valueMoment.isSame(condMoment));
+      break;
+    case 'before':
+      conditions.push(valueMoment.isBefore(condMoment));
+      break;
+    case 'at_or_before':
+      conditions.push(valueMoment.isSameOrBefore(condMoment));
+      break;
+    case 'after':
+      conditions.push(valueMoment.isAfter(condMoment));
+      break;
+    case 'at_or_after':
+      conditions.push(valueMoment.isSameOrAfter(condMoment));
+      break;
+    case 'between':
+      conditions.push(valueMoment.isBetween(condMoment, condMoment2));
+      break;
+    case 'is_empty':
+      conditions.push(!value);
+      break;
+    case 'is_anything':
+      conditions.push(1);
+      break;
+    default:
+      conditions.push(1);
+      break;
+  }
+  return conditions;
+};
+
+const buildConditions = (conditions = [], condition, value, condValue) => {
+  if(condition == 'is')
+    conditions.push(value === condValue);
+  else if(condition == 'isnot')
+    conditions.push(value !== condValue);
+  else if(condition === 'isempty')
+    conditions.push(!value);
+  else if(condition === 'isnotemtpy')
+    conditions.push(value !== '');
+  else if(condition === 'startswith')
+    conditions.push(value.startsWith(condValue));
+  else if(condition === 'endswith')
+    conditions.push(value.endsWith(condValue));
+  else if(condition === 'contains')
+    conditions.push(value.indexOf(condValue) !== -1);
+  else if(condition === 'doesnotcontain')
+    conditions.push(!(value.indexOf(condValue) !== -1));
+  else if(condition === 'isanything')
+    conditions.push(1);
+  else if(condition === 'issameas')
+    conditions.push(value === condValue);
+  else if(condition === 'isdifferentfrom')
+    conditions.push(value !== condValue);
+  else if(condition === 'isemptystring')
+    conditions.push(!value);
+  return conditions;
+};
 
 class ListView extends React.Component {
   constructor(props) {
     super(props);
+    const {filterData} = this.props.chosenFilterOption;
     this.state = {
       isShowFilter: false,
       isShowViewAddButton: false,
       isShowFilterAddButton: false,
-      isShowAddViewModal: false
+      isShowAddViewModal: false,
+      isShowAddFilterModal: false,
+      ands: filterData==null?[]:filterData.ands,
+      elements: filterData==null?[]:filterData.elements,
+      selected: filterData==null?[]:filterData.selected,
+      values: filterData==null?[]:filterData.values,
+      conditions: filterData==null?[]:filterData.conditions,
+      listViewRowData: this.props.listViewRowData
     };
+
     this.refViewSelect = null;
     this.refViewAddButton = null;
     this.refFilterSelect = null;
@@ -43,11 +177,30 @@ class ListView extends React.Component {
     this.handleViewAddModalClose = this.handleViewAddModalClose.bind(this);
     this.handleSaveView = this.handleSaveView.bind(this);
 
+    // Add Filter Modal Event Listeners
+    this.handleFilterAddModalClose = this.handleFilterAddModalClose.bind(this);
+    this.handleSaveFilter = this.handleSaveFilter.bind(this);
+
     this.handleAddCriteria = this.handleAddCriteria.bind(this);
 
     // AG GRID EVENT Listeners
     this.onGridReady = this.onGridReady.bind(this);
     this.onGridFilterChanged = this.onGridFilterChanged.bind(this);
+    this.renderFilterWidget = this.renderFilterWidget.bind(this);
+
+    // Handle filter widget options
+    this.handleFilterRemoveClick = this.handleFilterRemoveClick.bind(this);
+    this.handleFilterAddOr = this.handleFilterAddOr.bind(this);
+    this.handleFilterAddAnd = this.handleFilterAddAnd.bind(this);
+
+
+    this.handleChangeFieldCondition = this.handleChangeFieldCondition.bind(this);
+    this.handleChangeFieldValue = this.handleChangeFieldValue.bind(this);
+    this.handleChangeDateField = this.handleChangeDateField.bind(this);
+    this.handleChangeField = this.handleChangeField.bind(this);
+
+    this.handleFilter = this.handleFilter.bind(this);
+
   }
 
   //------------------ Event Listeners ------------------
@@ -82,8 +235,12 @@ class ListView extends React.Component {
     this.setState({ isShowAddViewModal: true });
   }
 
-  handleFilterSelectChange() {
-
+  handleFilterSelectChange(event) {
+    if(event != null) {
+      this.props.handleFilterSelectChange(event.value);
+    } else {
+      this.props.handleRemoveSavedFilterOption(this.props.chosenFilterOption.filterName);
+    }
   }
 
   handleFilterSelectOpen() {
@@ -103,15 +260,99 @@ class ListView extends React.Component {
   }
 
   handleFilterSelectAddButtonClick() {
-    console.log('Filter Add button clicked');
+    this.setState({ isShowAddFilterModal: true });
   }
 
   handleAddCriteria() {
+    this.addCriteria(false,0);
+  }
 
+  addCriteria(and, i) {
+    let j = i+1;
+    let showfilter = this.state.isShowFilter;
+    let elements = this.state.elements;
+    let values = this.state.values;
+    let selected = this.state.selected;
+    let conditions = this.state.conditions;
+    let ands = this.state.ands;
+
+    if(ands.length==1)	ands[0].value = and;
+
+    elements.splice(j,0,"");
+    values.splice(j,0,{value:''})
+    selected.splice(j,0,{value:''});
+    conditions.splice(j,0,{value:''});
+    ands.splice(j,0,{value:and});
+
+    if(i>0 && !and && ands[j-1]!=and && (ands[j+1]!=undefined || ands[j+1]!=and)){
+      ands[j-1] = {value:and};
+      values[j] = values[j-1];
+      selected[j] = selected[j-1];
+      conditions[j] = conditions[j-1];
+    }
+
+    this.setState({ showfilter:showfilter,elements:elements,values:values,selected:selected,conditions:conditions,ands: ands});
   }
 
   handleFilter() {
+    this.doFilter()
+  }
 
+  doFilter() {
+    let elements = this.state.elements;
+    let values = this.state.values;
+    let selected = this.state.selected;
+    let conditions = this.state.conditions;
+    let ands = this.state.ands;
+    let listViewRowData;
+
+    if (elements.length == 0 && values.length == 0 && selected.length == 0 && ands.length == 0) {
+      listViewRowData = this.props.listViewRowData;
+      this.setState({listViewRowData:listViewRowData})
+      return;
+    }
+
+    if(elements == "" && values[0].value == "" && values.length == 1 && selected[0].value == "" && selected.length == 1 && conditions[0].value == "" && conditions.length == 1 && ands[0].value == "" && ands.length == 1) {
+      listViewRowData = this.props.listViewRowData;
+    } else {
+      listViewRowData = this.props.listViewRowData.filter((t) => {
+        if (selected.length <= 0) return true;
+
+        let andconditions = [];
+        let orconditions = [];
+
+        for (let i=0; i< selected.length; i++) {
+          let sel = selected[i];
+          if (!sel.value) continue;
+
+          let condition = conditions[i].value;
+          let and = ands[i].value;
+
+          if(and) {
+            if (dateTypeHeaderFields.indexOf(sel.value) !== -1) {
+              andconditions = buildDateConditions(andconditions, condition, t[sel.value], values[i].value, values[i].value2);
+            } else {
+              andconditions = buildConditions(andconditions, condition, t[sel.value], values[i].value);
+            }
+          } else {
+            if (dateTypeHeaderFields.indexOf(sel.value) !== -1) {
+              orconditions = buildDateConditions(orconditions, condition, t[sel.value], values[i].value, values[i].value2);
+            } else {
+              orconditions = buildConditions(orconditions, condition, t[sel.value], values[i].value);
+            }
+          }
+        }
+
+        return andconditions.reduce((prevVal, el) => prevVal && el, true) &&
+          orconditions.reduce((prevVal, el) => prevVal + el, false);
+      });
+    };
+
+    console.log('new list data here');
+    console.log(listViewRowData);
+
+
+    this.setState({listViewRowData:listViewRowData})
   }
 
   //--- Add View Modal Events---
@@ -134,6 +375,27 @@ class ListView extends React.Component {
     // Close Modal
     this.handleViewAddModalClose();
   }
+  //--- Add Filter Modal Events---
+  handleFilterAddModalClose() {
+    this.setState({ isShowAddFilterModal: false})
+  }
+
+  handleSaveFilter() {
+    if(this.filterModalInput.value) {
+      const filterName = this.filterModalInput.value;
+
+      let filterData = {
+        filterData: { elements:this.state.elements, values: this.state.values, selected:this.state.selected, conditions:this.state.conditions, ands: this.state.ands }
+      };
+      const filterOption = {
+        filterName,
+        filterData
+      };
+      this.props.handleSaveFilterClick(filterOption);
+    }
+    // Close modal
+    this.handleFilterAddModalClose();
+  }
   //------ AG GRID EVENT LISTENRES
   onGridReady(params) {
     this.gridApi = params.api;
@@ -145,10 +407,272 @@ class ListView extends React.Component {
   onGridFilterChanged() {
 
   }
+  //--------- Filter widget listeners---------------
+  handleChangeField = (i) => (val) => {
+    //let ands = [{value:false}], elements = [''], selected =[''], values = [{value:''}];
+    let selected = [...this.state.selected];
+
+    // 2. Make a shallow copy of the item you want to mutate
+    let select = {...selected[i]};
+    // 3. Replace the property you're intested in
+    if(val != null)
+      select.value = val.value;
+    else{
+      select.value = '';
+      this.clearDateValues(i)
+    }
+    // 4. Put it back into our array. N.B. we *are* mutating the array here, but that's why we made a copy first
+    selected[i] = select;
+    // 5. Set the state to our new copy
+    this.setState({selected});
+  };
+
+  clearDateValues = (i) => {
+    const { values } = this.state;
+    this.setState({
+      values: values.map((fieldValue, index) => i === index ? {
+        ...fieldValue,
+        value: '',
+        value2: ''
+      } : fieldValue),
+    });
+  };
+
+  handleChangeFieldValue = (e) => {
+
+    let values = [...this.state.values];
+    // 2. Make a shallow copy of the item you want to mutate
+    let value = {...values[e.target.name]};
+    // 3. Replace the property you're intested in
+    value.value = e.target.value;
+    // 4. Put it back into our array. N.B. we *are* mutating the array here, but that's why we made a copy first
+    values[e.target.name] = value;
+    // 5. Set the state to our new copy
+    this.setState({values});
+  };
+
+  handleChangeDateField = (i) => (value) => {
+    const { conditions, values } = this.state;
+    this.setState({
+      conditions: conditions.map((condition, index) => i === index ? {
+        ...condition,
+        value: value.condition
+      } : condition),
+      values: values.map((fieldValue, index) => i === index ? {
+        ...fieldValue,
+        value: value.date,
+        value2: value.date2
+      } : fieldValue),
+    });
+  };
+
+  handleChangeFieldCondition = (i) => (val) => {
+
+    let conditions = [...this.state.conditions];
+
+    // 2. Make a shallow copy of the item you want to mutate
+    let condition = {...conditions[i]};
+
+    // 3. Replace the property you're intested in
+    if(val != null)
+      condition.value = val.value;
+    else
+      condition.value = '';
+    // 4. Put it back into our array. N.B. we *are* mutating the array here, but that's why we made a copy first
+    conditions[i] = condition;
+    // 5. Set the state to our new copy
+    this.setState({conditions});
+  };
+
+  //---------------------handle remove widget ------------
+  handleFilterRemoveClick(i) {
+    let elements = [...this.state.elements];
+    elements.splice(i,1);
+    this.setState({ elements });
+
+    let selected = [...this.state.selected];
+    selected.splice(i,1);
+    this.setState({ selected });
+
+    let values = [...this.state.values];
+    values.splice(i,1);
+    this.setState({ values });
+
+    let ands = [...this.state.ands];
+    ands.splice(i,1);
+    this.setState({ ands });
+  }
+  handleFilterAddOr(i) {
+    const _onChange = (val) => {
+      if(val!=null){
+        this.addCriteria(false,i);
+      }
+    };
+    return _onChange; // you can also do return _onChange.bind(this) if you need the scope.
+  }
+
+  handleFilterAddAnd(i) {
+    const _onChange = (val) => {
+      if(val!=null){
+        this.addCriteria(true,i);
+      }
+    };
+    return _onChange; // you can also do return _onChange.bind(this) if you need the scope.
+  }
   //================================================
 
   renderFilterWidget() {
+    const {
+      listViewHeaders
+    } = this.props;
 
+    let options = [];
+    if (listViewHeaders != undefined) {
+      listViewHeaders.map((header, i) => {options.push({value: header.headerName, label: header.headerName, idx:i})});
+    }
+
+    let {ands, elements, selected, values, conditions} = this.state;
+    let andWidget = ands.length>0?ands[0].value:false;
+    let widgets= [];
+    let widget = [];
+
+    elements.map((el, i) => {
+      let ordisabled =false;
+      let anddisabled = false;
+
+      if(ands[i].value) {
+        anddisabled = true;
+      }
+
+      if(andWidget != ands[i].value) {
+        andWidget = !andWidget;
+        widget[widget.length - 1].anddisabled = false;
+        widgets.push(widget);
+        widget = [{
+            selected: selected[i].value,
+            condition: conditions[i].value,
+            value: values[i].value,
+            and: ands[i].value,
+            idx: i,
+            ordisabled: ordisabled,
+            anddisabled: anddisabled
+          }];
+      } else {
+        widget.push({
+          selected:selected[i].value,
+          condition: conditions[i].value,
+          value: values[i].value,
+          and: ands[i].value,
+          idx:i,
+          ordisabled: ordisabled,
+          anddisabled: anddisabled
+        });
+      }
+
+      if (i+1 == elements.length) {
+        widget[widget.length - 1].anddisabled = false;
+        widgets.push(widget);
+      }
+    });
+
+    let lastWidgetSize = 0;
+    let andOrWidgets = widgets.map((widget, w) => {
+      let count = widget.length;
+      let and = widget[0].and;
+      let braceHeight = 0.62 * count + 'em';
+      let top = 20 * (count - 1) + 6 + 'px';
+      lastWidgetSize = w > 0 ? lastWidgetSize + widgets[w-1].length: 0;
+      return (<Row key={`criteria-${ w }`}>
+        <Col xs="1" style={{marginTop:"2px"}}>
+          <div style={{display:count>1?"block":"none",height:braceHeight}} className="brace brace_part1"/>
+          <div style={{display:count>1?"block":"none",height:braceHeight}} className="brace brace_part2"/>
+          <div style={{display:count>1?"block":"none",height:braceHeight}} className="brace brace_part3"/>
+          <div style={{display:count>1?"block":"none",height:braceHeight}} className="brace brace_part4"/>
+          <div style={{display:count>1?"block":"none",position:"absolute",top:top,marginLeft:"-10px"}}>{and?"AND":"OR"}</div>
+        </Col>
+        <Col> {widget.map((el, i) => {
+          let ordisabled = el.ordisabled;
+          let anddisabled = el.anddisabled;
+          let j = lastWidgetSize + i;
+
+          return (
+            <Row key={`and-${ j }`} style={{marginTop:'2px'}}>
+              <Col xs={{size:3}}>
+                <Select
+                  name="fields"
+                  options={options}
+                  value={el.selected}
+                  onChange={this.handleChangeField(j)}
+                />
+              </Col>
+              <Col xs={6}>
+                {dateTypeHeaderFields.indexOf(el.selected) !== -1 ? (
+                  <DateFilterField
+                    onChange={this.handleChangeDateField(j)}
+                    value={{
+                      condition: el.condition,
+                      date: el.value,
+                      date2: el.value2
+                    }}
+                  />
+                ) : (
+                  <Row>
+                    <Col xs={7}>
+                      <Select
+                        name="conditions"
+                        options={listViewConditions}
+                        value={el.condition}
+                        onChange={this.handleChangeFieldCondition(j)}
+                      />
+                    </Col>
+                    <Col xs={5}>
+                      <Input
+                        type="text"
+                        value={el.value}
+                        name={j}
+                        className="Select-placeholder"
+                        onChange={this.handleChangeFieldValue}
+                      />
+                    </Col>
+                  </Row>
+                )}
+              </Col>
+              <Col xs={3}>
+                <Button color="success" onClick={ (j)=>{this.handleFilterRemoveClick(j)} }>-</Button>{' '}
+                <Button color="success" onClick={ this.handleFilterAddOr(j) } disabled={ordisabled}>OR</Button>{' '}
+                <Button color="success" onClick={ this.handleFilterAddAnd(j) } disabled={anddisabled}>AND</Button>
+              </Col>
+            </Row>
+          )
+        })}
+          <Row><Col xs={{size:1}}>{w<widgets.length-1?"and":""}</Col></Row>
+        </Col>
+      </Row>);
+    });
+
+    return (<Container>
+      <Row>
+        <Col xs="1"></Col>
+        <Col xs="4" style={{marginBottom:"5px",textAlign:"left"}}>
+          All of these conditions should be met
+        </Col>
+        <Col> </Col>
+      </Row>
+      {andOrWidgets}
+    </Container>)
+  }
+
+  componentWillReceiveProps(nextProps) {
+    if (nextProps.listViewRowData) {
+      this.setState({listViewRowData: nextProps.listViewRowData});
+    }
+
+    if (this.props.chosenFilterOption != nextProps.chosenFilterOption) {
+      if(nextProps.chosenFilterOption != null) {
+        let {ands, elements, selected, values, conditions} = nextProps.chosenFilterOption.filterData.filterData;
+        this.setState({isShowFilter:true, ands: ands, elements:elements, selected:selected, values:values, conditions: conditions});
+      }
+    }
   }
 
   render() {
@@ -158,9 +682,10 @@ class ListView extends React.Component {
       savedFilterOptions,
       chosenViewOption,
       chosenFilterOption,
-      listViewHeaders,
-      listViewRowData
+      listViewHeaders
     } = this.props;
+    const { listViewRowData } = this.state;
+
 
     //----- Make the options of saved view selects
     let viewSelectOptions = [];
@@ -172,6 +697,18 @@ class ListView extends React.Component {
       (view) => viewSelectOptions.push({
         value:view.viewName,
         label:view.viewName
+      })
+    );
+
+    let filterSelectOptions = [];
+    let chosenFilterSelectOption = '';
+    if (chosenFilterOption != null)
+      chosenFilterSelectOption = chosenFilterOption.filterName;
+
+    savedFilterOptions.map(
+      (filterOption) => filterSelectOptions.push({
+        value:filterOption.filterName,
+        label: filterOption.filterName
       })
     );
     //---------
@@ -225,8 +762,8 @@ class ListView extends React.Component {
           <Col xs="2" className="text-left p-0">
             <Select
               name="hidcols"
-              options={savedFilterOptions}
-              value={chosenFilterOption}
+              options={filterSelectOptions}
+              value={chosenFilterSelectOption}
               onChange={this.handleFilterSelectChange}
               onOpen={this.handleFilterSelectOpen}
               onClose={this.handleFilterSelectClose}
@@ -253,7 +790,7 @@ class ListView extends React.Component {
           </Row>
           <Jumbotron className="pt-4 pb-4">
             <Container>
-
+              {this.renderFilterWidget()}
             </Container>
           </Jumbotron>
         </Collapse>
@@ -284,10 +821,26 @@ class ListView extends React.Component {
             open={this.state.isShowAddViewModal}
             onRequestClose={this.handleViewAddModalClose}
           >
-            <label>View Name:<input type="text" name="viewname"  ref={input => {
+            <label>View name:<input type="text" name="viewname"  ref={input => {
               this.viewModalInput= input;
             }}/></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
             <Button color="success" onClick={this.handleSaveView}>Save</Button>{' '}
+          </Dialog>
+          <Dialog
+            title={
+              <div>
+                Add Filter
+                <img src='https://d30y9cdsu7xlg0.cloudfront.net/png/53504-200.png' className="close-img" onClick={this.handleFilterAddModalClose}/>
+              </div>
+            }
+            modal={false}
+            open={this.state.isShowAddFilterModal}
+            onRequestClose={ this.handleFilterAddModalClose}
+          >
+            <label>Filter name:<input type="text" name="filtername"  ref={input => {
+              this.filterModalInput = input;
+            }}/></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+            <Button color="success" onClick={this.handleSaveFilter}>Save</Button>{' '}
           </Dialog>
         </div>
       </div>
@@ -298,7 +851,10 @@ class ListView extends React.Component {
 ListView.propTypes = {
   handleViewSelectChange: PropTypes.func,
   handleSaveViewClick: PropTypes.func,
-  handleRemoveSavedViewOption: PropTypes.func
+  handleRemoveSavedViewOption: PropTypes.func,
+  handleFilterSelectChange: PropTypes.func,
+  handleSaveFilterClick: PropTypes.func,
+  handleRemoveSavedFilterOption: PropTypes.func
 };
 
 export default ListView;

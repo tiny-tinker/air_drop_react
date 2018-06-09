@@ -1,4 +1,5 @@
 const savedViewOptions = 'savedViewOptions';
+const savedFilterOptions = 'savedFilterOptions';
 
 class CustomerStorage {
   static init(key) {
@@ -31,6 +32,14 @@ class CustomerStorage {
 
   static getSavedViewOptions() {
     return CustomerStorage.get(savedViewOptions);
+  }
+
+  static updateSavedFilterOptions(data) {
+    CustomerStorage.update(savedFilterOptions, data);
+  }
+
+  static getSavedFilterOptions() {
+    return CustomerStorage.get(savedFilterOptions);
   }
 }
 
