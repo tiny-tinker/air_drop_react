@@ -141,6 +141,7 @@ class ListView extends React.Component {
     super(props);
     const {filterData} = this.props.chosenFilterOption;
     this.state = {
+      isRedrawTable: true,
       isShowFilter: false,
       isShowViewAddButton: false,
       isShowFilterAddButton: false,
@@ -151,7 +152,10 @@ class ListView extends React.Component {
       selected: filterData==null?[]:filterData.selected,
       values: filterData==null?[]:filterData.values,
       conditions: filterData==null?[]:filterData.conditions,
-      listViewRowData: this.props.listViewRowData
+      listViewRowData: this.props.listViewRowData,
+      savedViewOptions: this.props.savedViewOptions,
+      savedFilterOptions: this.props.savedFilterOptions,
+      chosenViewOption: this.props.chosenViewOption
     };
 
     this.refViewSelect = null;
@@ -201,6 +205,7 @@ class ListView extends React.Component {
 
     this.handleFilter = this.handleFilter.bind(this);
 
+    this.onGridReady = this.onGridReady.bind(this);
   }
 
   //------------------ Event Listeners ------------------
@@ -210,57 +215,68 @@ class ListView extends React.Component {
 
   handleViewSelectChange(event) {
     if (event != null) {
-      this.props.handleViewSelectChange(event.value);
+      const option = {
+        viewName:event.value,
+        viewType: this.props.listViewType
+      };
+      this.props.handleViewSelectChange(option);
     } else {
-      this.props.handleRemoveSavedViewOption(this.props.chosenViewOption.viewName);
+      this.props.handleRemoveSavedViewOption(this.props.chosenViewOption);
     }
   }
 
   handleViewSelectOpen() {
-    this.setState({isShowViewAddButton: true});
+    //this.setState({isShowViewAddButton: true});
     const selectOptionDivIndex = this.refViewSelect.control.parentElement.childNodes.length;
     const height = this.refViewSelect.control.scrollHeight + this.refViewSelect.control.parentElement.childNodes[selectOptionDivIndex - 1].scrollHeight;
     this.refViewAddButton.style.position = 'absolute';
+    this.refViewAddButton.style.display = 'block';
     this.refViewAddButton.style.top = height + 'px';
     this.refViewAddButton.style.left = '0';
     this.refViewAddButton.style.width = '100%';
   }
   handleViewSelectClose() {
-    let setStateDelay = ()=>{ this.setState({ isShowViewAddButton: false }); };
+    let setStateDelay = ()=>{ this.refViewAddButton.style.display = 'none'; };
     setStateDelay = setStateDelay.bind(this);
     setTimeout( setStateDelay, 150);
   }
 
   handleViewSelectAddButtonClick() {
-    this.setState({ isShowAddViewModal: true });
+    this.setState({ isShowAddViewModal: true, isEnableRenderTable:false });
   }
 
   handleFilterSelectChange(event) {
     if(event != null) {
-      this.props.handleFilterSelectChange(event.value);
+      const option = {
+        filterName:event.value,
+        filterType: this.props.listViewType
+      };
+      this.props.handleFilterSelectChange(option);
     } else {
-      this.props.handleRemoveSavedFilterOption(this.props.chosenFilterOption.filterName);
+      this.props.handleRemoveSavedFilterOption(this.props.chosenFilterOption);
     }
   }
 
   handleFilterSelectOpen() {
-    this.setState({isShowFilterAddButton: true});
+    //this.setState({isShowFilterAddButton: true});
     const selectOptionDivIndex = this.refFilterSelect.control.parentElement.childNodes.length;
     const height = this.refFilterSelect.control.scrollHeight + this.refFilterSelect.control.parentElement.childNodes[selectOptionDivIndex - 1].scrollHeight;
     this.refFilterAddButton.style.position = 'absolute';
     this.refFilterAddButton.style.top = height + 'px';
+    this.refFilterAddButton.style.top = height + 'px';
+    this.refFilterAddButton.style.display = 'block';
     this.refFilterAddButton.style.left = '0';
     this.refFilterAddButton.style.width = '100%';
   }
 
   handleFilterSelectClose() {
-    let setStateDelay = ()=>{ this.setState({ isShowFilterAddButton: false }); };
+    let setStateDelay = ()=>{ this.refFilterAddButton.style.display = 'none'; };
     setStateDelay = setStateDelay.bind(this);
     setTimeout( setStateDelay, 150);
   }
 
   handleFilterSelectAddButtonClick() {
-    this.setState({ isShowAddFilterModal: true });
+    this.setState({ isShowAddFilterModal: true, isEnableRenderTable: false });
   }
 
   handleAddCriteria() {
@@ -348,10 +364,6 @@ class ListView extends React.Component {
       });
     };
 
-    console.log('new list data here');
-    console.log(listViewRowData);
-
-
     this.setState({listViewRowData:listViewRowData})
   }
 
@@ -368,7 +380,8 @@ class ListView extends React.Component {
       });
       let viewOption = {
         viewName,
-        chosenColumns
+        chosenColumns,
+        viewType: this.props.listViewType
       };
       this.props.handleSaveViewClick(viewOption);
     }
@@ -389,7 +402,8 @@ class ListView extends React.Component {
       };
       const filterOption = {
         filterName,
-        filterData
+        filterData,
+        filterType: this.props.listViewType
       };
       this.props.handleSaveFilterClick(filterOption);
     }
@@ -401,8 +415,6 @@ class ListView extends React.Component {
     this.gridApi = params.api;
     this.columnApi = params.columnApi;
     this.gridApi.sizeColumnsToFit();
-    if (this.props.chosenViewOption != null)
-      this.columnApi.setColumnState(this.props.chosenViewOption.chosenColumns);
   }
   onGridFilterChanged() {
 
@@ -532,6 +544,13 @@ class ListView extends React.Component {
     }
 
     let {ands, elements, selected, values, conditions} = this.state;
+    if (ands == null) {
+      ands =[];
+      elements =[];
+      selected = [];
+      values = [];
+      conditions = [];
+    }
     let andWidget = ands.length>0?ands[0].value:false;
     let widgets= [];
     let widget = [];
@@ -548,6 +567,9 @@ class ListView extends React.Component {
         andWidget = !andWidget;
         widget[widget.length - 1].anddisabled = false;
         widgets.push(widget);
+        if(selected[i] == null)
+          return;
+
         widget = [{
             selected: selected[i].value,
             condition: conditions[i].value,
@@ -673,25 +695,48 @@ class ListView extends React.Component {
         this.setState({isShowFilter:true, ands: ands, elements:elements, selected:selected, values:values, conditions: conditions});
       }
     }
+
+    if (nextProps.savedViewOptions) {
+      this.setState({savedViewOptions:nextProps.savedViewOptions});
+      this.setState({savedFilterOptions:nextProps.savedFilterOptions});
+    }
+
+    if (this.props.chosenViewOption != nextProps.chosenViewOption) {
+      if (nextProps.chosenViewOption != null)
+      {
+        if (nextProps.chosenViewOption.chosenColumns != null) {
+
+          if (this.columnApi != null)
+          {
+            this.columnApi.setColumnState(nextProps.chosenViewOption.chosenColumns);
+          }
+        }
+      }
+      this.setState({chosenViewOption: nextProps.chosenViewOption});
+    }
   }
 
   render() {
 
     const {
-      savedViewOptions,
-      savedFilterOptions,
-      chosenViewOption,
       chosenFilterOption,
       listViewHeaders
     } = this.props;
-    const { listViewRowData } = this.state;
-
+    const {
+      listViewRowData,
+      savedViewOptions,
+      savedFilterOptions,
+      chosenViewOption
+    } = this.state;
 
     //----- Make the options of saved view selects
     let viewSelectOptions = [];
     let chosenViewSelectOption = '';
     if (chosenViewOption != null)
+    {
       chosenViewSelectOption = chosenViewOption.viewName;
+    }
+
 
     savedViewOptions.map(
       (view) => viewSelectOptions.push({
@@ -711,14 +756,6 @@ class ListView extends React.Component {
         label: filterOption.filterName
       })
     );
-    //---------
-
-    // Set the Column view options
-    if (this.columnApi != null){
-      if (chosenViewOption != null) {
-        this.columnApi.setColumnState(chosenViewOption.chosenColumns);
-      }
-    }
 
     if (this.gridApi != null)
       this.gridApi.sizeColumnsToFit();
@@ -754,7 +791,7 @@ class ListView extends React.Component {
               ref={(ref) => this.refViewAddButton = ref}
               className="btn-success btn-add"
               onClick={this.handleViewSelectAddButtonClick}
-              hidden={this.state.isShowViewAddButton?'':'hidden'}
+              style={{display: 'none'}}
             >
               +Add
             </button>
@@ -775,7 +812,7 @@ class ListView extends React.Component {
               ref={(ref) => this.refFilterAddButton = ref}
               className="btn-success btn-add"
               onClick={this.handleFilterSelectAddButtonClick}
-              hidden={this.state.isShowFilterAddButton?'':'hidden'}
+              style={{display: 'none'}}
             >
               +Add
             </button>
@@ -802,7 +839,6 @@ class ListView extends React.Component {
             enableColResize={true}
             enableSorting={true}
             floatingFilter={true}
-            showToolPanel={true}
             onGridReady={this.onGridReady}
             onGridSizeChanged={this.onGridReady}
             onColumnVisible={this.onGridFilterChanged}

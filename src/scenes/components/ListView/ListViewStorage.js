@@ -1,7 +1,7 @@
 const savedViewOptions = 'savedViewOptions';
 const savedFilterOptions = 'savedFilterOptions';
 
-class CustomerStorage {
+class ListViewStorage {
   static init(key) {
     switch (key) {
       case savedViewOptions:
@@ -20,27 +20,27 @@ class CustomerStorage {
   static get(key) {
     const data = localStorage.getItem(key);
     if (!data) {
-      CustomerStorage.init(key);
+      ListViewStorage.init(key);
       return JSON.parse(localStorage.getItem(key));
     }
     return JSON.parse(data);
   }
 
   static updateSavedViewOptions(data) {
-    CustomerStorage.update(savedViewOptions, data);
+    ListViewStorage.update(savedViewOptions, data);
   }
 
   static getSavedViewOptions() {
-    return CustomerStorage.get(savedViewOptions);
+    return ListViewStorage.get(savedViewOptions);
   }
 
   static updateSavedFilterOptions(data) {
-    CustomerStorage.update(savedFilterOptions, data);
+    ListViewStorage.update(savedFilterOptions, data);
   }
 
   static getSavedFilterOptions() {
-    return CustomerStorage.get(savedFilterOptions);
+    return ListViewStorage.get(savedFilterOptions);
   }
 }
 
-export default CustomerStorage;
+export default ListViewStorage;
